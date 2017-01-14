@@ -6,13 +6,14 @@ ENT.Type = "point"
 local healthRatio = 0.5
 local armorRatio = 0.5
 local ammoRatio = 0.5
-local itemSpread = 3
+local itemSpread = 10
 
 local ammoEntPrefixes = {"cw_ammo_",  --Add custom prefixes here, if your entity ends with the ammotype name (stripped of spaces and non-alphanumeric characters)
 						 "item_ammo_"
 						}
 
-local ammoEntTable = {  Pistol = "item_ammo_pistol", 
+if cwreplaceAmmoEntTable == nil then
+cwreplaceAmmoEntTable = {  Pistol = "item_ammo_pistol", 
 						SMG1 =   "item_ammo_smg1",
 						SMG1_Grenade = "item_ammo_smg1_grenade",
 						AR2 = "item_ammo_ar2",
@@ -23,6 +24,9 @@ local ammoEntTable = {  Pistol = "item_ammo_pistol",
 						XBowBolt = "item_ammo_crossbow",
 						AR2AltFire = "item_ammo_ar2_altfire"
 					 }
+end
+
+cwreplaceIgnoreClass = {"cw_ammo_ent_base", "cw_bullet_"}
 
 function ENT:Initialize()
 	print("item_dynamic_resupply initialized")
@@ -58,19 +62,27 @@ function ENT:Initialize()
 	PrintTable(spawnents)
 	shuffleTable(spawnents)
 
+	undo.Create( "prop" )
+	undo.AddEntity( self )
+
 	local amount = math.random(3)
 	for i,entname in pairs(spawnents) do
 		local temp = ents.Create(entname)
-		temp:SetPos(self:GetPos()+Vector(math.random(itemSpread),math.random(itemSpread),0))
-		temp:SetCollisionGroup(COLLISION_GROUP_INTERACTIVE_DEBRIS)
+		temp:SetPos(self:GetPos()+Vector(math.random(-itemSpread,itemSpread),math.random(-itemSpread,itemSpread),0))
+		--temp:SetOwner(p)
 		temp:Spawn()
+		undo.AddEntity( temp )
 		if(i == amount) then break end
 	end
 	spawnents = {}
+	undo.SetPlayer(p) --TODO: Find better way of doing this
+	undo.Finish()
+
+	self:Remove()
 end
 
 function ammoNameToEntityName(ammoname)
-	local entname = ammoEntTable[ammoname]
+	local entname = cwreplaceAmmoEntTable[ammoname]
 	if entname ~= nil then
 		return entname
 	else
@@ -125,3 +137,19 @@ function shuffleTable( t )
         t[i], t[j] = t[j], t[i]
     end
 end
+
+function get_crates_for_ammo()
+	for i,ent in pairs(scripted_ents.GetList()) do
+		local skip = false
+		for _,word in pairs(cwreplaceIgnoreClass) do
+			if string.find(ent["t"]["ClassName"],word) then skip = true end
+		end
+		local cal = ent["t"]["Caliber"]
+		if(cal ~= nil) and !skip then
+			print("Found ammo ent "..i.." for ammo "..cal)
+			cwreplaceAmmoEntTable[cal] = i
+		end
+	end
+end
+
+hook.Add( "InitPostEntity", "get_crates_for_ammo", get_crates_for_ammo )
